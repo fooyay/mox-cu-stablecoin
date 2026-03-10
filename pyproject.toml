@@ -1,7 +1,7 @@
 [project]
-name = "moccasin_project"
+name = "moccasin_stablecoin"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple stablecoin implemented in Vyper, using the Moccasin framework."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = []
