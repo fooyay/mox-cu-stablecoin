@@ -27,6 +27,7 @@ event CollateralDeposited:
     token: indexed(address)
     amount: uint256
 
+# external functions
 
 @deploy
 def __init__(
@@ -52,6 +53,8 @@ def deposit_collateral(token_collateral_address: address, amount_collateral: uin
     @notice Users can call this function to deposit collateral tokens (e.g. WETH, WBTC) into the system. The engine will keep track of how much collateral each user has deposited.
     """
     self._deposit_collateral(token_collateral_address, amount_collateral)
+
+# internal functions
 
 @internal
 def _deposit_collateral(token_collateral_address: address, amount_collateral: uint256):
