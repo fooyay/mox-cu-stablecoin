@@ -10,6 +10,7 @@
     Collateral Type: Crypto (ERC-20 Tokens)
 """
 from interfaces import i_decentralized_stable_coin
+from ethereum.ercs import IERC20
 
 
 # State variables
@@ -58,4 +59,7 @@ def _deposit_collateral(token_collateral_address: address, amount_collateral: ui
     assert self.token_to_price_feed[token_collateral_address] != empty(address), "DSCEngine: Token not supported"
 
     self.user_to_token_to_amount_deposited[msg.sender][token_collateral_address] += amount_collateral
-    log CollateralDeposited(msg.sender, token_collateral_address, amount_collateral)
+    log CollateralDeposited(user=msg.sender, token=token_collateral_address, amount=amount_collateral)
+
+    success: bool = extcall IERC20(token_collateral_address).transferFrom(msg.sender, self, amount_collateral)
+    assert success, "DSCEngine: Transfer failed"
