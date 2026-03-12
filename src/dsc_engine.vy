@@ -45,21 +45,24 @@ def __init__(
     self.token_to_price_feed[token_addresses[1]] = price_feed_addresses[1]
 
 @external
-def deposit_collateral(token: address, amount: uint256):
+def deposit_collateral(token_collateral_address: address, amount_collateral: uint256):
     """
-    @param token The address of the collateral token being deposited
-    @param amount The amount of the collateral token being deposited
+    @param token_collateral_address The address of the collateral token being deposited
+    @param amount_collateral The amount of the collateral token being deposited
     @notice Users can call this function to deposit collateral tokens (e.g. WETH, WBTC) into the system. The engine will keep track of how much collateral each user has deposited.
     """
-    self._deposit_collateral(token, amount)
+    self._deposit_collateral(token_collateral_address, amount_collateral)
 
 @internal
 def _deposit_collateral(token_collateral_address: address, amount_collateral: uint256):
+    # checks
     assert amount_collateral > 0, "DSCEngine: Needs more than zero collateral"
     assert self.token_to_price_feed[token_collateral_address] != empty(address), "DSCEngine: Token not supported"
 
+    # effects (note: this includes logging)
     self.user_to_token_to_amount_deposited[msg.sender][token_collateral_address] += amount_collateral
     log CollateralDeposited(user=msg.sender, token=token_collateral_address, amount=amount_collateral)
 
+    # interactions
     success: bool = extcall IERC20(token_collateral_address).transferFrom(msg.sender, self, amount_collateral)
     assert success, "DSCEngine: Transfer failed"
