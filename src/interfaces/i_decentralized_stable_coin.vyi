@@ -1,0 +1,20 @@
+# pragma version 0.4.3
+"""
+@license MIT
+@title Decentralized Stable Coin Interface
+@author Sean Coates
+@notice
+    Collateral: Exogenous (WETH, WBTC, etc.)
+    Minting (Stability) Mechanism: Decentralized (Algorithmic)
+    Value (Relative Stability): Anchored (Pegged to USD)
+    Collateral Type: Crypto (ERC-20 Tokens)
+"""
+
+@external
+def burn_from(owner: address, amount: uint256):
+    ...
+
+@external
+def mint(owner: address, amount: uint256):
+    ...
+    
