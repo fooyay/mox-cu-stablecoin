@@ -35,6 +35,12 @@ event CollateralDeposited:
     token: indexed(address)
     amount: uint256
 
+event CollateralRedeemed:
+    token: indexed(address)
+    amount: uint256
+    _from: address
+    _to: address
+
 # external functions
 
 @deploy
@@ -61,6 +67,33 @@ def deposit_collateral(token_collateral_address: address, amount_collateral: uin
     @notice Users can call this function to deposit collateral tokens (e.g. WETH, WBTC) into the system. The engine will keep track of how much collateral each user has deposited.
     """
     self._deposit_collateral(token_collateral_address, amount_collateral)
+
+@external
+def deposit_and_mint(token_collateral_addres: address, amount_collateral: uint256, amount_dsc: uint256):
+    self._deposit_collateral(token_collateral_addres, amount_collateral)
+    self._mint_dsc(amount_dsc)
+
+@external
+def redeem_collateral(token_collateral_address: address, amount_collateral: uint256):
+    """
+    @param token_collateral_address The address of the collateral token being redeemed
+    @param amount_collateral The amount of the collateral token being redeemed
+    @notice Users can call this function to redeem their collateral tokens 
+        (e.g. WETH, WBTC) from the system. The engine will check if the user has
+        enough collateral deposited and if redeeming the requested amount would
+        keep their health factor above the minimum threshold, and if so, it will
+        update the user's deposited collateral amount and transfer the collateral
+        tokens from the engine contract back to the user.
+    """
+    self._redeem_collateral(token_collateral_address, amount_collateral, msg.sender, msg.sender)
+    self._revert_if_health_factor_too_low(msg.sender)
+
+@external
+def redeem_for_dsc(token_collateral: address, amount_collateral: uint256, amount_dsc: uint256):
+    self._burn_dsc(amount_dsc, msg.sender, msg.sender)
+    self._redeem_collateral(token_collateral, amount_collateral, msg.sender, msg.sender)
+    self._revert_if_health_factor_too_low(msg.sender)
+
 
 @external
 def mint_dsc(amount_dsc_to_mint: uint256):
@@ -94,6 +127,18 @@ def _deposit_collateral(token_collateral_address: address, amount_collateral: ui
     assert success, "DSCEngine: Transfer failed"
 
 @internal
+def _redeem_collateral(token_collateral_address: address, amount_collateral: uint256, _from: address, _to: address):
+    """
+    @param token_collateral_address The address of the collateral token being redeemed
+    @param amount_collateral The amount of the collateral token being redeemed
+    """
+    self.user_to_token_to_amount_deposited[_from][token_collateral_address] -= amount_collateral
+    log CollateralRedeemed(token=token_collateral_address, amount=amount_collateral, _from=_from, _to=_to)
+
+    success: bool = extcall IERC20(token_collateral_address).transfer(_to, amount_collateral)
+    assert success, "DSCEngine: Transfer failed"
+
+@internal
 def _mint_dsc(amount_dsc_to_mint: uint256):
     """
     @param amount_dsc_to_mint The amount of dsc the user wants to mint
@@ -108,6 +153,20 @@ def _mint_dsc(amount_dsc_to_mint: uint256):
     self.user_to_dsc_minted[msg.sender] += amount_dsc_to_mint
 
     extcall dsc.mint(msg.sender, amount_dsc_to_mint)
+
+@internal
+def _burn_dsc(amount: uint256, on_behalf_of: address, dsc_from: address):
+    """
+    @param amount The amount of dsc to burn
+    @param on_behalf_of The address of the user whose dsc is being burned (this is the user whose minted dsc amount will be updated and whose health factor will be checked)
+    @param dsc_from The address from which the dsc tokens will be burned (this is the address that will call the burn function on the dsc contract, which should have allowance to burn the user's dsc tokens)
+    @notice This function updates the user's minted dsc amount and calls the burn_from function on the dsc contract to burn the dsc tokens from the specified address.
+    """
+    assert amount > 0, "DSCEngine: Need to burn more than 0"
+    self.user_to_dsc_minted[on_behalf_of] -= amount
+
+    extcall dsc.burn_from(dsc_from, amount)
+
 
 @internal
 def _revert_if_health_factor_too_low(user: address):
@@ -144,6 +203,8 @@ def _calculate_health_factor(total_dsc_minted: uint256, total_collateral_value_i
     """
     if total_dsc_minted == 0:
         return max_value(uint256)  # If the user hasn't minted any dsc, we can consider their health factor to be infinite (or a very large number) since they have no debt
+    # BUG there might be a bug here. threshold and precision might need to be swapped? Need to run a concrete example to verify
+    # let's write some tests!
     collateral_adjusted_for_threshold: uint256 = (total_collateral_value_in_usd * LIQUIDATION_PRECISION) // LIQUIDATION_THRESHOLD
     return (collateral_adjusted_for_threshold * PRECISION) // total_dsc_minted
 
