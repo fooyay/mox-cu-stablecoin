@@ -68,7 +68,7 @@ def mint_dsc(amount_dsc_to_mint: uint256):
     @param amount_dsc_to_mint The amount of dsc the user wants to mint
     @notice Users can call this function to mint dsc tokens. The engine will check if the user has enough collateral deposited to mint the requested amount of dsc, and if so, it will call the mint function on the dsc contract to mint the dsc tokens to the user.
     """
-    pass
+    self._mint_dsc(amount_dsc_to_mint)
 
 # internal functions
 
