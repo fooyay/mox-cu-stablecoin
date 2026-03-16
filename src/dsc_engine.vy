@@ -103,6 +103,15 @@ def mint_dsc(amount_dsc_to_mint: uint256):
     """
     self._mint_dsc(amount_dsc_to_mint)
 
+@external
+def burn_dsc(amount: uint256):
+    """
+    @param amount The amount of dsc to burn
+    @notice Users can call this function to burn their dsc tokens.
+    """
+    self._burn_dsc(amount, msg.sender, msg.sender)
+    self._revert_if_health_factor_too_low(msg.sender)
+
 # internal functions
 
 @internal
@@ -148,9 +157,9 @@ def _mint_dsc(amount_dsc_to_mint: uint256):
         to mint the dsc tokens to the user.
     """
     assert amount_dsc_to_mint > 0, "DSCEngine: Need to mint more than 0"
-    self._revert_if_health_factor_too_low(msg.sender) 
     
     self.user_to_dsc_minted[msg.sender] += amount_dsc_to_mint
+    self._revert_if_health_factor_too_low(msg.sender) 
 
     extcall dsc.mint(msg.sender, amount_dsc_to_mint)
 
@@ -203,9 +212,7 @@ def _calculate_health_factor(total_dsc_minted: uint256, total_collateral_value_i
     """
     if total_dsc_minted == 0:
         return max_value(uint256)  # If the user hasn't minted any dsc, we can consider their health factor to be infinite (or a very large number) since they have no debt
-    # BUG there might be a bug here. threshold and precision might need to be swapped? Need to run a concrete example to verify
-    # let's write some tests!
-    collateral_adjusted_for_threshold: uint256 = (total_collateral_value_in_usd * LIQUIDATION_PRECISION) // LIQUIDATION_THRESHOLD
+    collateral_adjusted_for_threshold: uint256 = (total_collateral_value_in_usd * LIQUIDATION_THRESHOLD) // LIQUIDATION_PRECISION
     return (collateral_adjusted_for_threshold * PRECISION) // total_dsc_minted
 
 @internal
