@@ -284,17 +284,29 @@ def _get_usd_value(token: address, amount: uint256) -> uint256:
     @param amount The amount of the token we want to get the USD value of
     @return The USD value of the given amount of the token, calculated using the price feed
     """
-    price_feed: i_price_feed = i_price_feed(self.token_to_price_feed[token])
-    round_data: (uint80, int256, uint256, uint256, uint80) = staticcall price_feed.latestRoundData()
-    price: int256 = round_data[1]
-    return ((convert(price, uint256) * ADDITIONAL_FEED_PRECISION) * amount) // PRECISION  # adjusting for decimals and precision
+    price: uint256 = self._get_token_price(token)
+    return ((price * ADDITIONAL_FEED_PRECISION) * amount) // PRECISION  # adjusting for decimals and precision
 
 @internal
 @view
 def _get_token_amount_from_usd_value(token: address, usd_amount_in_wei: uint256) -> uint256:
+    """
+    @param token The address of the token we want to get the amount of
+    @param usd_amount_in_wei The USD value (in wei) that we want to convert to an amount of the token
+    @return The amount of the token that is equivalent to the given USD value, calculated using the price feed
+    """
+    price: uint256 = self._get_token_price(token)
+    return (usd_amount_in_wei * PRECISION) // (price * ADDITIONAL_FEED_PRECISION)
+
+@internal
+@view
+def _get_token_price(token: address) -> uint256:
+    """
+    @param token The address of the token we want to get the price of
+    @return The price of the token in USD, with 18 decimals of precision, obtained from the price feed
+    """
     price_feed: i_price_feed = i_price_feed(self.token_to_price_feed[token])
     round_data: (uint80, int256, uint256, uint256, uint80) = staticcall price_feed.latestRoundData()
-    price: int256 = round_data[1]
-    return (usd_amount_in_wei * PRECISION) // (convert(price, uint256) * ADDITIONAL_FEED_PRECISION)
+    return convert(round_data[1], uint256)
     
 
