@@ -4,4 +4,6 @@ version = "0.1.0"
 description = "A simple stablecoin implemented in Vyper, using the Moccasin framework."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "moccasin>=0.4.3",
+]
