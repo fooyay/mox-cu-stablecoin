@@ -18,6 +18,7 @@ ADDITIONAL_FEED_PRECISION: constant(uint256) = 10**10  # Chainlink price feeds h
 PRECISION: constant(uint256) = 10**18  # We will use 18 decimals of precision for all calculations in the system
 LIQUIDATION_THRESHOLD: constant(uint256) = 50  # If a user's health factor falls below this threshold (e.g. 50%), their position can be liquidated
 LIQUIDATION_PRECISION: constant(uint256) = 100 
+LIQUIDATION_BONUS_RATE: constant(uint256) = 10  # When a liquidator covers a user's debt, they receive a bonus amount of the user's collateral (e.g. 10% bonus, so if they cover $100 of the user's debt, they get $110 worth of the user's collateral)
 MIN_HEALTH_FACTOR: constant(uint256) = 1 * 10**18
 
 # State variables
@@ -111,6 +112,40 @@ def burn_dsc(amount: uint256):
     """
     self._burn_dsc(amount, msg.sender, msg.sender)
     self._revert_if_health_factor_too_low(msg.sender)
+
+@external
+def liquidate(collateral_token: address, user_to_liquidate: address, debt_to_cover: uint256):
+    """
+    @param collateral_token The address of the collateral token that the
+        liquidator will receive as payment for covering the user's debt
+    @param user_to_liquidate The address of the user whose position is
+        being liquidated
+    @param debt_to_cover The amount of the user's debt (in dsc) that the
+        liquidator wants to cover. This is a dollar amount in wei.
+    @notice This function allows liquidators to cover the debt of
+        undercollateralized users in exchange for their collateral. The
+        function checks if the user's health factor is above the minimum
+        threshold, and if so, it allows the liquidator to specify an
+        amount of the user's debt to cover. In addition, the liquidator
+        receives a bonus amount of the user's collateral as an incentive
+        for performing the liquidation.
+    """
+    # 1. check if their health factor is bad
+    # 2. cover their debt, by us burning our DSC, but reducing their minted DSC amount
+    # 3. we will take their collateral
+    assert debt_to_cover > 0, "DSCEngine: No debt to cover"
+    starting_health_factor: uint256 = self._health_factor(user_to_liquidate)
+    assert starting_health_factor < MIN_HEALTH_FACTOR, "DSCEngine: Can't liquidate a healthy position"
+
+    token_amount_from_debt_covered: uint256 = self._get_token_amount_from_usd_value(collateral_token, debt_to_cover)
+    bonus_collateral_amount: uint256 = (token_amount_from_debt_covered * LIQUIDATION_BONUS_RATE) // LIQUIDATION_PRECISION
+
+    self._redeem_collateral(collateral_token, token_amount_from_debt_covered + bonus_collateral_amount, user_to_liquidate, msg.sender)
+    self._burn_dsc(debt_to_cover, user_to_liquidate, msg.sender)
+
+    ending_health_factor: uint256 = self._health_factor(user_to_liquidate)
+    assert ending_health_factor > starting_health_factor, "DSCEngine: Did not improve health factor"
+    self._revert_if_health_factor_too_low(msg.sender)  # don't let the liquidator end up with an undercollateralized position after the liquidation
 
 # internal functions
 
@@ -253,4 +288,13 @@ def _get_usd_value(token: address, amount: uint256) -> uint256:
     round_data: (uint80, int256, uint256, uint256, uint80) = staticcall price_feed.latestRoundData()
     price: int256 = round_data[1]
     return ((convert(price, uint256) * ADDITIONAL_FEED_PRECISION) * amount) // PRECISION  # adjusting for decimals and precision
+
+@internal
+@view
+def _get_token_amount_from_usd_value(token: address, usd_amount_in_wei: uint256) -> uint256:
+    price_feed: i_price_feed = i_price_feed(self.token_to_price_feed[token])
+    round_data: (uint80, int256, uint256, uint256, uint80) = staticcall price_feed.latestRoundData()
+    price: int256 = round_data[1]
+    return (usd_amount_in_wei * PRECISION) // (convert(price, uint256) * ADDITIONAL_FEED_PRECISION)
     
+
