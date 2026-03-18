@@ -1,2 +1,7 @@
 [run]
 plugins = boa.coverage
+source = src
+
+[report]
+include = src/*.vy
+show_missing = True
