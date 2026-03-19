@@ -213,3 +213,41 @@ def test_redeem_collateral_emits_event(some_user, weth, dsc_engine):
         assert (
             event._4 == some_user
         )  # _to field (renamed by namedtuple due to leading underscore)
+
+
+# redeem_for_dsc
+
+
+def test_redeem_for_dsc_does_not_revert(some_user, weth, dsc, dsc_engine):
+    # Setup: deposit collateral and mint DSC.
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_and_mint(weth, COLLATERAL_AMOUNT, MINT_AMOUNT)
+        # Grant the engine allowance to burn the user's DSC.
+        dsc.approve(dsc_engine, MINT_AMOUNT)
+        dsc_engine.redeem_for_dsc(weth, COLLATERAL_AMOUNT, MINT_AMOUNT)
+
+    assert dsc_engine.user_to_dsc_minted(some_user) == 0
+    assert dsc_engine.user_to_token_to_amount_deposited(some_user, weth) == 0
+    assert dsc.balanceOf(some_user) == 0
+    assert weth.balanceOf(some_user) == COLLATERAL_AMOUNT
+
+
+# mint_dsc
+
+
+def test_mint_dsc_reverts_if_health_factor_too_low(some_user, weth, dsc_engine):
+    # No collateral deposited, so minting any DSC breaks the health factor.
+    with boa.env.prank(some_user):
+        with boa.reverts("DSCEngine: Health factor too low"):
+            dsc_engine.mint_dsc(MINT_AMOUNT)
+
+
+def test_mint_dsc_does_not_revert(some_user, weth, dsc, dsc_engine):
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_collateral(weth, COLLATERAL_AMOUNT)
+        dsc_engine.mint_dsc(MINT_AMOUNT)
+
+    assert dsc_engine.user_to_dsc_minted(some_user) == MINT_AMOUNT
+    assert dsc.balanceOf(some_user) == MINT_AMOUNT
