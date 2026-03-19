@@ -1,4 +1,4 @@
-# Project Context: Moccasin Portfolio Rebalancer
+# Project Context: Moccasin Stablecoin Engine Code Style & Architecture Guidelines
 
 ## Critical Tooling Rules (NEVER violate these)
 - **Testing:** ALWAYS use `mox test`. 
