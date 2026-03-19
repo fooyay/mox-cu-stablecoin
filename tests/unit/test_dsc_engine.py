@@ -251,3 +251,24 @@ def test_mint_dsc_does_not_revert(some_user, weth, dsc, dsc_engine):
 
     assert dsc_engine.user_to_dsc_minted(some_user) == MINT_AMOUNT
     assert dsc.balanceOf(some_user) == MINT_AMOUNT
+
+
+# burn_dsc
+
+
+def test_burn_dsc_reverts_if_no_dsc_to_burn(some_user, dsc_engine):
+    # No DSC minted, so burning any amount causes an underflow revert.
+    with boa.env.prank(some_user):
+        with boa.reverts():
+            dsc_engine.burn_dsc(MINT_AMOUNT)
+
+
+def test_burn_dsc_does_not_revert(some_user, weth, dsc, dsc_engine):
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_and_mint(weth, COLLATERAL_AMOUNT, MINT_AMOUNT)
+        dsc.approve(dsc_engine, MINT_AMOUNT)
+        dsc_engine.burn_dsc(MINT_AMOUNT)
+
+    assert dsc_engine.user_to_dsc_minted(some_user) == 0
+    assert dsc.balanceOf(some_user) == 0
