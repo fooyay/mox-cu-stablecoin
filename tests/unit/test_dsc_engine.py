@@ -96,7 +96,9 @@ def test_deposit_and_mint_reverts_if_dsc_amount_zero(some_user, weth, dsc_engine
 def test_deposit_and_mint_reverts_if_token_not_allowed(some_user, dsc_engine):
     with boa.env.prank(some_user):
         with boa.reverts("DSCEngine: Token not supported"):
-            dsc_engine.deposit_and_mint(UNSUPPORTED_TOKEN, COLLATERAL_AMOUNT, MINT_AMOUNT)
+            dsc_engine.deposit_and_mint(
+                UNSUPPORTED_TOKEN, COLLATERAL_AMOUNT, MINT_AMOUNT
+            )
 
 
 def test_deposit_and_mint_reverts_if_health_factor_too_low(some_user, weth, dsc_engine):
@@ -139,3 +141,75 @@ def test_deposit_and_mint_transfers_dsc_to_user(some_user, weth, dsc, dsc_engine
         dsc_engine.deposit_and_mint(weth, COLLATERAL_AMOUNT, MINT_AMOUNT)
 
     assert dsc.balanceOf(some_user) == MINT_AMOUNT
+
+
+# redeem_collateral
+
+
+def test_redeem_collateral_reverts_if_amount_exceeds_deposited(
+    some_user, weth, dsc_engine
+):
+    # No collateral deposited — underflow causes a revert.
+    with boa.env.prank(some_user):
+        with boa.reverts():
+            dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+
+def test_redeem_collateral_reverts_if_health_factor_breaks(some_user, weth, dsc_engine):
+    # Deposit collateral, mint DSC, then try to redeem all collateral —
+    # health factor would drop to zero, so it must revert.
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_and_mint(weth, COLLATERAL_AMOUNT, MINT_AMOUNT)
+        with boa.reverts("DSCEngine: Health factor too low"):
+            dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+
+def test_redeem_collateral_does_not_revert(some_user, weth, dsc_engine):
+    # No DSC minted, so redeeming all collateral keeps health factor at max.
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_collateral(weth, COLLATERAL_AMOUNT)
+        dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+
+def test_redeem_collateral_updates_collateral_state(some_user, weth, dsc_engine):
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_collateral(weth, COLLATERAL_AMOUNT)
+        dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+    assert dsc_engine.user_to_token_to_amount_deposited(some_user, weth) == 0
+
+
+def test_redeem_collateral_returns_tokens_to_user(some_user, weth, dsc_engine):
+    balance_before = weth.balanceOf(some_user)
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_collateral(weth, COLLATERAL_AMOUNT)
+        dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+    assert weth.balanceOf(some_user) == balance_before
+
+
+def test_redeem_collateral_emits_event(some_user, weth, dsc_engine):
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_collateral(weth, COLLATERAL_AMOUNT)
+        dsc_engine.redeem_collateral(weth, COLLATERAL_AMOUNT)
+
+        logs = [
+            log
+            for log in dsc_engine.get_logs()
+            if type(log).__name__ == "CollateralRedeemed"
+        ]
+        assert len(logs) == 1
+        event = logs[0]
+        assert event.token == weth.address
+        assert event.amount == COLLATERAL_AMOUNT
+        assert (
+            event._3 == some_user
+        )  # _from field (renamed by namedtuple due to leading underscore)
+        assert (
+            event._4 == some_user
+        )  # _to field (renamed by namedtuple due to leading underscore)
