@@ -7,6 +7,8 @@ from eth_utils import to_wei
 from src import dsc_engine
 from tests.conftest import COLLATERAL_AMOUNT
 
+UNSUPPORTED_TOKEN: str = "0x0000000000000000000000000000000000000000"
+
 # With COLLATERAL_AMOUNT (10 WETH) at $2,000/ETH => $20,000 collateral.
 # At 50% liquidation threshold => max mintable DSC is $10,000.
 MINT_AMOUNT: int = to_wei(100, "ether")  # $100 DSC, well below the $10,000 limit
@@ -35,10 +37,9 @@ def test_reverts_if_collateral_zero(some_user, weth, dsc_engine):
 
 
 def test_reverts_if_token_not_allowed(some_user, dsc_engine):
-    bad_token = "0x0000000000000000000000000000000000000000"
     with boa.env.prank(some_user):
         with boa.reverts("DSCEngine: Token not supported"):
-            dsc_engine.deposit_collateral(bad_token, 1)
+            dsc_engine.deposit_collateral(UNSUPPORTED_TOKEN, 1)
 
 
 def test_good_deposit_does_not_revert(some_user, weth, dsc_engine):
@@ -93,10 +94,9 @@ def test_deposit_and_mint_reverts_if_dsc_amount_zero(some_user, weth, dsc_engine
 
 
 def test_deposit_and_mint_reverts_if_token_not_allowed(some_user, dsc_engine):
-    bad_token = "0x0000000000000000000000000000000000000000"
     with boa.env.prank(some_user):
         with boa.reverts("DSCEngine: Token not supported"):
-            dsc_engine.deposit_and_mint(bad_token, COLLATERAL_AMOUNT, MINT_AMOUNT)
+            dsc_engine.deposit_and_mint(UNSUPPORTED_TOKEN, COLLATERAL_AMOUNT, MINT_AMOUNT)
 
 
 def test_deposit_and_mint_reverts_if_health_factor_too_low(some_user, weth, dsc_engine):
