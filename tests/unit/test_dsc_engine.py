@@ -3,9 +3,10 @@ from IPython.testing.decorators import f
 import pytest
 import boa
 from eth.codecs.abi.exceptions import EncodeError
+from eth_account import Account
 from eth_utils import to_wei
 from src import dsc_engine
-from tests.conftest import COLLATERAL_AMOUNT
+from tests.conftest import COLLATERAL_AMOUNT, INITIAL_BALANCE
 
 UNSUPPORTED_TOKEN: str = "0x0000000000000000000000000000000000000000"
 
@@ -15,6 +16,14 @@ MINT_AMOUNT: int = to_wei(100, "ether")  # $100 DSC, well below the $10,000 limi
 OVER_THRESHOLD_MINT_AMOUNT: int = to_wei(
     10_001, "ether"
 )  # $10,001 DSC, just above the $10,000 limit
+
+# Liquidation scenario:
+#   some_user deposits 10 WETH at $2,000 => $20,000 collateral, threshold => $10,000 max
+#   mints $9,000 DSC => health_factor = 10,000/9,000 ≈ 1.11 (healthy)
+#   price crashes to $1,500 => adjusted collateral = $7,500
+#   health_factor = 7,500/9,000 ≈ 0.83 < 1 (undercollateralized)
+LIQUIDATION_MINT_AMOUNT: int = to_wei(9_000, "ether")
+CRASHED_ETH_PRICE: int = 150_000_000_000  # $1,500 in Chainlink 8-decimal format
 
 
 def test_reverts_if_token_lengths_are_different(
@@ -272,3 +281,53 @@ def test_burn_dsc_does_not_revert(some_user, weth, dsc, dsc_engine):
 
     assert dsc_engine.user_to_dsc_minted(some_user) == 0
     assert dsc.balanceOf(some_user) == 0
+
+
+# liquidate
+
+
+def test_liquidate_reverts_if_debt_to_cover_zero(some_user, weth, dsc_engine):
+    with boa.env.prank(some_user):
+        with boa.reverts("DSCEngine: No debt to cover"):
+            dsc_engine.liquidate(weth, some_user, 0)
+
+
+def test_liquidate_reverts_if_position_is_healthy(some_user, weth, dsc_engine):
+    # some_user has no DSC minted so health factor is max — not liquidatable.
+    with boa.env.prank(some_user):
+        with boa.reverts("DSCEngine: Can't liquidate a healthy position"):
+            dsc_engine.liquidate(weth, some_user, MINT_AMOUNT)
+
+
+def test_liquidate_clears_undercollateralized_position(
+    some_user, weth, wbtc, eth_usd_price_feed, dsc, dsc_engine
+):
+    # bad user: deposit WETH and mint near-limit DSC.
+    with boa.env.prank(some_user):
+        weth.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_and_mint(weth, COLLATERAL_AMOUNT, LIQUIDATION_MINT_AMOUNT)
+
+    # liquidator: deposit WBTC (price unaffected by ETH crash) and mint matching DSC.
+    liquidator = Account.create(99).address
+    boa.env.set_balance(liquidator, INITIAL_BALANCE)
+    with boa.env.prank(liquidator):
+        wbtc.mock_mint()
+        wbtc.approve(dsc_engine, COLLATERAL_AMOUNT)
+        dsc_engine.deposit_and_mint(wbtc, COLLATERAL_AMOUNT, LIQUIDATION_MINT_AMOUNT)
+
+    # Crash ETH price inside an anchor so the change doesn't leak to other tests.
+    with boa.env.anchor():
+        eth_usd_price_feed.updateAnswer(CRASHED_ETH_PRICE)
+
+        with boa.env.prank(liquidator):
+            dsc.approve(dsc_engine, LIQUIDATION_MINT_AMOUNT)
+            dsc_engine.liquidate(weth, some_user, LIQUIDATION_MINT_AMOUNT)
+
+        # Bad user's debt and collateral should be cleared.
+        assert dsc_engine.user_to_dsc_minted(some_user) == 0
+        assert (
+            dsc_engine.user_to_token_to_amount_deposited(some_user, weth)
+            < COLLATERAL_AMOUNT
+        )
+        # Liquidator received some_user's WETH (collateral + 10% bonus).
+        assert weth.balanceOf(liquidator) > 0
