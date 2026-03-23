@@ -147,6 +147,21 @@ def liquidate(collateral_token: address, user_to_liquidate: address, debt_to_cov
     assert ending_health_factor > starting_health_factor, "DSCEngine: Did not improve health factor"
     self._revert_if_health_factor_too_low(msg.sender)  # don't let the liquidator end up with an undercollateralized position after the liquidation
 
+# external view functions
+
+@external
+@view
+def get_usd_value(collateral_address: address, amount: uint256) -> uint256:
+    return self._get_usd_value(collateral_address, amount)    
+
+@external
+@view
+def get_collateral_balance_of_user(user: address, token_collateral: address) -> uint256:
+    return self.user_to_token_to_amount_deposited[user][token_collateral]
+    
+    
+
+
 # internal functions
 
 @internal
