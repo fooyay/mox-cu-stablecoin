@@ -158,7 +158,11 @@ def get_usd_value(collateral_address: address, amount: uint256) -> uint256:
 @view
 def get_collateral_balance_of_user(user: address, token_collateral: address) -> uint256:
     return self.user_to_token_to_amount_deposited[user][token_collateral]
-    
+
+@external
+@view
+def get_token_amount_from_usd_value(token: address, usd_amount_in_wei: uint256) -> uint256:
+    return self._get_token_amount_from_usd_value(token, usd_amount_in_wei)
     
 
 

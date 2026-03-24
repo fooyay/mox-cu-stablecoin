@@ -1,6 +1,6 @@
 from hypothesis.stateful import RuleBasedStateMachine, initialize, rule, invariant
 from hypothesis import strategies as st
-from hypothesis import assume
+from hypothesis import assume, settings
 from script.deploy_dsc import deploy_dsc
 from script.deploy_dsc_engine import deploy_dsc_engine
 from moccasin.config import get_active_network
@@ -9,6 +9,8 @@ from boa.util.abi import Address
 import boa
 from boa.test.strategies import strategy
 from eth_utils import to_wei
+from boa import BoaError
+from src.mocks import MockV3Aggregator  # ty: ignore[unresolved-import]
 
 
 USERS_SIZE = 10
@@ -73,6 +75,51 @@ class StablecoinFuzzer(RuleBasedStateMachine):
         with boa.env.prank(user):
             self.dsc_engine.redeem_collateral(collateral, to_redeem)
 
+    @rule(
+        collateral_seed=st.integers(min_value=0, max_value=1),
+        user_seed=st.integers(min_value=0, max_value=USERS_SIZE - 1),
+        amount=strategy("uint256", min_value=1, max_value=MAX_DEPOSIT_SIZE),
+    )
+    def mint_dsc(self, collateral_seed, user_seed, amount):
+        user = self.users[user_seed]
+        with boa.env.prank(user):
+            try:
+                self.dsc_engine.mint_dsc(amount)
+            except BoaError as e:
+                if "DSCEngine: Health factor too low" in str(e.stack_trace[0].vm_error):
+                    collateral = self._get_collateral_from_seed(collateral_seed)
+                    amount_to_give = self.dsc_engine.get_token_amount_from_usd_value(
+                        collateral, amount
+                    )
+                    if amount_to_give == 0:
+                        amount_to_give = 1
+                    amount_to_give *= 2  # give them more than they need to be safe
+                    self.mint_and_deposit(collateral_seed, user_seed, amount_to_give)
+                    self.dsc_engine.mint_dsc(amount_to_give)
+
+    @rule(
+        percentage_new_price=st.floats(min_value=0.2, max_value=1.15),
+        collateral_seed=st.integers(min_value=0, max_value=1),
+    )
+    def update_collateral_price(self, percentage_new_price, collateral_seed):
+        collateral = self._get_collateral_from_seed(collateral_seed)
+        price_feed = MockV3Aggregator.at(
+            self.dsc_engine.token_to_price_feed(collateral.address)
+        )
+        current_price = price_feed.latestRoundData()[1]
+        new_price = int(current_price * percentage_new_price)
+        print(f"fuzz - Updating price from {current_price} to {new_price}")
+        price_feed.updateAnswer(new_price)
+
+    @rule(
+        collateral_seed=st.integers(min_value=0, max_value=1),
+        user_seed=st.integers(min_value=0, max_value=USERS_SIZE - 1),
+        amount=strategy("uint256", min_value=1, max_value=MAX_DEPOSIT_SIZE),
+    )
+    def mint_and_update(self, collateral_seed, user_seed, amount):
+        self.mint_and_deposit(collateral_seed, user_seed, amount)
+        self.update_collateral_price(0.3, collateral_seed)
+
     # Invariant: protocol must have more value in collateral than total supply
     @invariant()
     def protocol_must_have_more_value_than_total_supply(self):
@@ -94,3 +141,4 @@ class StablecoinFuzzer(RuleBasedStateMachine):
 
 
 stablecoin_fuzzer = StablecoinFuzzer.TestCase
+stablecoin_fuzzer.settings = settings(max_examples=64, stateful_step_count=64)
