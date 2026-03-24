@@ -25,3 +25,9 @@ _For documentation, please run `mox --help` or visit [the Moccasin documentation
   - This means they will have a 4/1 ratio of collateral to stablecoin, which is very safe!
   - We will set the required collateral ratio to 2/1
 - If the price of ETH drops, for example to $50, others should  be able to liquidate those users.
+
+
+# Additional docs to be done:
+# how to run
+# update doc strings
+# write docs

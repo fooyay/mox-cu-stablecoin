@@ -163,7 +163,14 @@ def get_collateral_balance_of_user(user: address, token_collateral: address) -> 
 @view
 def get_token_amount_from_usd_value(token: address, usd_amount_in_wei: uint256) -> uint256:
     return self._get_token_amount_from_usd_value(token, usd_amount_in_wei)
-    
+
+@external
+def get_health_factor(user: address) -> uint256:
+    return self._health_factor(user)
+
+@external
+def get_account_information(user: address) -> (uint256, uint256):
+    return self._get_account_information(user)
 
 
 # internal functions
